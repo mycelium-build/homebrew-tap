@@ -1,0 +1,73 @@
+name: Update Datalith casks
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Published datalith-app tag (empty refreshes both channels)
+        required: false
+        type: string
+      publish:
+        description: Commit verified casks to the tap
+        required: true
+        default: true
+        type: boolean
+
+concurrency:
+  group: update-casks
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  update:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-15
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_ANALYTICS: '1'
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Test release selection and validation
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
+      - name: Verify published DMGs and generate casks
+        run: |
+          if [ -n "$RELEASE_TAG" ]; then
+            python3 scripts/update.py --tag "$RELEASE_TAG"
+          else
+            python3 scripts/update.py
+          fi
+      - name: Register local tap for checks
+        run: |
+          mkdir -p "$(brew --repository)/Library/Taps/mycelium-build"
+          ln -s "$GITHUB_WORKSPACE" "$(brew --repository)/Library/Taps/mycelium-build/homebrew-tap"
+          if brew command trust >/dev/null 2>&1; then brew trust mycelium-build/tap; fi
+      - name: Check Homebrew casks
+        run: |
+          brew style Casks/*.rb
+          brew audit --cask --online mycelium-build/tap/datalith
+          # Preview intentionally tracks GitHub prereleases; all other audits still run.
+          brew audit --cask --online --except=github_prerelease_version mycelium-build/tap/datalith@preview
+          brew livecheck --cask mycelium-build/tap/datalith mycelium-build/tap/datalith@preview
+      - name: Show changes
+        run: git diff -- Casks
+      - name: Publish verified changes
+        if: inputs.publish
+        run: |
+          if git diff --quiet -- Casks; then
+            echo 'Casks are already current.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add Casks/datalith.rb Casks/datalith@preview.rb
+          git commit -m 'chore(casks): update Datalith releases' \
+            -m '- Refresh channel versions and architecture-specific SHA-256 checksums
+          - Verify published DMG signatures, notarization and bundle identities'
+          git push origin HEAD:main

@@ -1,0 +1,26 @@
+name: Check tap
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: macos-15
+    timeout-minutes: 15
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: '1'
+      HOMEBREW_NO_ANALYTICS: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: python3 -m unittest discover -s scripts -p 'test_*.py'
+      - name: Register local tap for checks
+        run: |
+          mkdir -p "$(brew --repository)/Library/Taps/mycelium-build"
+          ln -s "$GITHUB_WORKSPACE" "$(brew --repository)/Library/Taps/mycelium-build/homebrew-tap"
+          if brew command trust >/dev/null 2>&1; then brew trust mycelium-build/tap; fi
+      - run: brew style Casks/*.rb
+      - run: brew audit --cask mycelium-build/tap/datalith mycelium-build/tap/datalith@preview
