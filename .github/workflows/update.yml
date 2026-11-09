@@ -64,8 +64,8 @@ jobs:
             echo 'Casks are already current.'
             exit 0
           fi
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git config user.name 'datalith-bot[bot]'
+          git config user.email '311197260+datalith-bot[bot]@users.noreply.github.com'
           git add Casks/datalith.rb Casks/datalith@preview.rb
           git commit -m 'chore(casks): update Datalith releases' \
             -m '- Refresh channel versions and architecture-specific SHA-256 checksums
